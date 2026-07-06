@@ -13,10 +13,13 @@ import json
 
 import pytest
 from datasets import Dataset, DatasetDict
+from transformers import AutoModelForCausalLM, AutoTokenizer, Qwen2Config
 
 from clausewise.evaluate import (
     EvaluationResult,
     ForgettingResult,
+    _generate_chat_single,
+    _generate_single,
     predict_clause_type,
     run_evaluation,
     run_forgetting_evaluation,
@@ -144,3 +147,54 @@ def test_run_forgetting_evaluation_scores_share_keys_and_are_binary(monkeypatch)
     assert set(result.base_scores.keys()) == set(result.finetuned_scores.keys())
     for scores in (result.base_scores, result.finetuned_scores):
         assert all(v in (0, 1) for v in scores.values())
+
+
+def _tiny_qwen2_model(tokenizer):
+    """A randomly-initialized, tiny Qwen2 model sized to match `tokenizer`'s real vocab, no download.
+
+    # WHY vocab_size=len(tokenizer): the real Qwen2.5 tokenizer emits token
+    # ids across its full ~151k vocabulary. A model with a smaller embedding
+    # table than that raises "index out of range in self" the moment a
+    # real-tokenizer id lands outside its embedding matrix — this isn't
+    # optional padding, it must match exactly.
+    """
+    config = Qwen2Config(
+        vocab_size=len(tokenizer),
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        max_position_embeddings=64,
+    )
+    return AutoModelForCausalLM.from_config(config)
+
+
+def test_generate_single_moves_inputs_to_model_device():
+    """_generate_single() must move tokenized inputs onto the model's actual device before generate().
+
+    Regression test for a device-mismatch bug: tokenizer output starts on
+    CPU, but load_adapter's device_map="auto" can place the model on
+    cuda:0 on Kaggle's T4, and model.generate() raises a RuntimeError if
+    inputs and model parameters live on different devices. This runs the
+    real (unmocked) function end to end on CPU — next(model.parameters()).device
+    resolves to "cpu" here, so the assertion that it doesn't crash and that
+    the device-move code path executes is what's being checked; the same
+    code path is what makes this work unchanged on a CUDA device.
+    """
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+    model = _tiny_qwen2_model(tokenizer)
+
+    output = _generate_single(model, tokenizer, "### Response:\n", max_new_tokens=4)
+
+    assert isinstance(output, str)
+
+
+def test_generate_chat_single_moves_inputs_to_model_device():
+    """_generate_chat_single() must also move tokenized inputs onto the model's actual device before generate()."""
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+    model = _tiny_qwen2_model(tokenizer)
+
+    output = _generate_chat_single(model, tokenizer, "Hello.", max_new_tokens=4)
+
+    assert isinstance(output, str)

@@ -1,0 +1,14 @@
+{
+  "accuracy": 1.0,
+  "macro_f1": 0.75,
+  "per_class_f1": {
+    "Cap On Liability": 1.0,
+    "Governing Law": 1.0,
+    "Parties": 1.0,
+    "Termination For Convenience": 0.0
+  },
+  "unknown_rate": 0.0,
+  "n_samples": 3,
+  "confusion_matrix": {},
+  "duration_seconds": 3.5762786865234375e-05
+}

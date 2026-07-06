@@ -65,6 +65,15 @@ def _generate_single(model, tokenizer, prompt: str, max_new_tokens: int) -> str:
     import torch
 
     inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
+    # WHY: the base model is loaded with device_map="auto" (load_adapter),
+    # which places it on cuda:0 on Kaggle's T4 — but tokenizer output always
+    # starts on CPU. Without moving inputs to the model's device first,
+    # model.generate() raises a RuntimeError from mixing CPU and CUDA
+    # tensors. next(model.parameters()).device reads the actual device the
+    # model landed on rather than hardcoding "cuda", so this also works
+    # unchanged on the CPU-only tests/dev machine.
+    device = next(model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
@@ -94,6 +103,8 @@ def _generate_chat_single(model, tokenizer, user_message: str, max_new_tokens: i
         [{"role": "user", "content": user_message}], tokenize=False, add_generation_prompt=True
     )
     inputs = tokenizer(chat_prompt, return_tensors="pt")
+    device = next(model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
