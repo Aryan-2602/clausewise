@@ -9,8 +9,10 @@ Kaggle terminal) — it is NOT meant to run on the local CPU dev machine.
 #   %cd clausewise
 #   !git pull   # if the repo already exists from a previous session
 
-Estimated runtime on a T4 (16GB): 45-90 minutes for 3 epochs on the full CUAD
-train split (configs/qlora_config.yaml's defaults — full dataset, no sample cap).
+Measured runtime on a T4 (16GB): ~107 minutes for 3 epochs on the full CUAD
+train split (11,272 oversampled examples, configs/qlora_config.yaml's
+defaults — full dataset, no sample cap). First real run measured 2026-07-06:
+train_loss 0.523, final epoch eval_loss 0.184, eval_mean_token_accuracy 0.940.
 """
 
 import json
