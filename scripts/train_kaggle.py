@@ -34,6 +34,13 @@ def _print_metrics_table(log_history: list[dict]) -> None:
     # entries in log_history (a train-loss entry has no "eval_loss" key and
     # vice versa) — we merge them by nearest epoch so each row of the table
     # reflects one epoch's train + eval numbers together.
+    # WHY eval_mean_token_accuracy, not a custom "eval_accuracy": SFTTrainer's
+    # default loss_type ("chunked_nll") never materializes full per-token
+    # logits, so a hand-written compute_metrics reading raw logits crashes
+    # (see build_trainer's docstring in clausewise/train.py). SFTTrainer
+    # already computes token-level accuracy internally from the same
+    # memory-safe aggregates and logs it as eval_mean_token_accuracy — that's
+    # what "Eval Accuracy" reports here.
     """
     by_epoch: dict[float, dict] = {}
     for entry in log_history:
@@ -45,8 +52,8 @@ def _print_metrics_table(log_history: list[dict]) -> None:
             row["train_loss"] = entry["loss"]
         if "eval_loss" in entry:
             row["eval_loss"] = entry["eval_loss"]
-        if "eval_accuracy" in entry:
-            row["eval_accuracy"] = entry["eval_accuracy"]
+        if "eval_mean_token_accuracy" in entry:
+            row["eval_accuracy"] = entry["eval_mean_token_accuracy"]
 
     def _fmt(value: float | None, width: int) -> str:
         return f"{value:>{width}.4f}" if value is not None else f"{'—':>{width}}"

@@ -179,62 +179,6 @@ def format_training_example(example: dict, tokenizer, max_length: int = 512) -> 
     }
 
 
-def _preprocess_logits_for_metrics(logits, labels):
-    """Reduce (batch, seq_len, vocab_size) logits to argmax token ids before Trainer accumulates them.
-
-    # TRADEOFF: Trainer's default eval loop concatenates every batch's raw
-    # logits in memory before calling compute_metrics. With a ~150k
-    # vocabulary and 512-token sequences, that's tens of GB across a full
-    # eval split — well past a T4's 16GB. Argmax-ing per batch here throws
-    # away the actual probabilities (so we can only ever compute discrete
-    # accuracy, not e.g. log-loss) but keeps eval memory bounded by sequence
-    # length instead of vocab size.
-    """
-    if isinstance(logits, tuple):
-        logits = logits[0]
-    return logits.argmax(dim=-1)
-
-
-def _compute_metrics(eval_pred) -> dict[str, float]:
-    """Compute exact-match accuracy over non-masked label positions for Trainer's eval loop.
-
-    # WHY the shift: Trainer's eval_pred hands back raw, unshifted logits and
-    # labels — logits at position t are the model's prediction for the token
-    # at position t+1, but labels[t] is the actual token at position t.
-    # Comparing them position-for-position without shifting silently computes
-    # an off-by-one-misaligned accuracy (transformers' own loss functions do
-    # this shift internally, which is easy to forget when reimplementing a
-    # metric outside that path).
-    # WHY iterate per-batch: our examples have wildly different token lengths
-    # (a single clause-type label vs. a full instruction+clause prompt), so
-    # each eval batch gets padded to its own max length, not a dataset-wide
-    # one. Trying to torch.cat/np.stack predictions across batches of
-    # different padded lengths raises "too many indices for array" (it
-    # silently degrades into a ragged 1-D object array) — this is exactly
-    # what build_trainer's eval_do_concat_batches=False avoids, by handing
-    # compute_metrics a list of per-batch arrays instead of one pre-stacked
-    # array. Accumulating counts batch-by-batch sidesteps needing them to
-    # share a shape at all.
-    """
-    import numpy as np
-
-    predictions, labels = eval_pred
-    if not isinstance(predictions, (list, tuple)):
-        predictions, labels = [predictions], [labels]
-
-    total_correct = 0
-    total_counted = 0
-    for preds_batch, labels_batch in zip(predictions, labels):
-        preds_batch = np.asarray(preds_batch)[:, :-1]
-        labels_batch = np.asarray(labels_batch)[:, 1:]
-        mask = labels_batch != -100
-        total_correct += int(((preds_batch == labels_batch) & mask).sum())
-        total_counted += int(mask.sum())
-
-    accuracy = total_correct / max(total_counted, 1)
-    return {"accuracy": float(accuracy)}
-
-
 def build_trainer(
     model,
     tokenizer,
@@ -249,6 +193,18 @@ def build_trainer(
     — SFTTrainer detects a pre-processed dataset via the presence of the
     "input_ids" column and skips its own formatting/tokenization step.
 
+    # WHY no custom compute_metrics: an earlier version of this function
+    # passed a hand-written compute_metrics/preprocess_logits_for_metrics
+    # pair that assumed the model always returns standard (batch, seq, vocab)
+    # logits. It doesn't: SFTConfig defaults loss_type to "chunked_nll", a
+    # memory-efficient loss that projects the lm_head only on non-masked
+    # tokens and returns aggregate scalars (num_correct_tokens, entropy_sum),
+    # never materializing full logits. That mismatch is what crashed eval on
+    # the Kaggle T4 ("array is 0-dimensional"). SFTTrainer already computes
+    # and logs `eval_mean_token_accuracy` (and `eval_entropy`) internally from
+    # those same aggregates, memory-safely, regardless of loss_type — so we
+    # rely on that built-in metric instead of reimplementing (and re-breaking)
+    # it ourselves.
     # WHY not wired here: config['data']['use_class_weights'] is read by
     # clausewise.data.get_class_weights() but not applied to this trainer's
     # loss. SFTTrainer's default loss is token-level cross-entropy computed
@@ -265,13 +221,6 @@ def build_trainer(
 
     sft_config = SFTConfig(
         max_length=config["model"]["max_length"],
-        # WHY: eval batches have widely varying padded lengths (clause-type
-        # labels are a handful of tokens; full prompts are hundreds) — the
-        # default eval_do_concat_batches=True tries to stack all batches'
-        # predictions into one array and silently produces a ragged/1-D
-        # array instead, which _compute_metrics can't index. False keeps
-        # each batch separate; _compute_metrics accumulates per-batch counts.
-        eval_do_concat_batches=False,
         **training_cfg,
     )
 
@@ -281,8 +230,6 @@ def build_trainer(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         processing_class=tokenizer,
-        compute_metrics=_compute_metrics,
-        preprocess_logits_for_metrics=_preprocess_logits_for_metrics,
     )
     return trainer
 
