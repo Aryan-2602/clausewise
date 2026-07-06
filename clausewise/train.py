@@ -134,6 +134,17 @@ def prepare_model_for_qlora(model, config: dict):
     return peft_model
 
 
+def build_prompt_prefix(clause_text: str) -> str:
+    """Build the exact prompt prefix used for both training and inference.
+
+    Single source of truth for the "### Instruction / ### Input / ### Response"
+    template: format_training_example (here) and clausewise.evaluate's
+    predict_clause_type both call this, so eval prompts can never silently
+    drift from what the model was actually trained on.
+    """
+    return f"### Instruction:\n{INSTRUCTION}\n\n### Input:\n{clean_clause(clause_text)}\n\n### Response:\n"
+
+
 def format_training_example(example: dict, tokenizer, max_length: int = 512) -> dict:
     """Tokenize one (clause_text, clause_type) example with the output-only loss mask.
 
@@ -157,9 +168,8 @@ def format_training_example(example: dict, tokenizer, max_length: int = 512) -> 
     # typical instruction-tuning run even when the model is still learning.
     """
     clause_type = example["clause_type"]
-    clause_text = clean_clause(example["clause_text"])
 
-    prefix = f"### Instruction:\n{INSTRUCTION}\n\n### Input:\n{clause_text}\n\n### Response:\n"
+    prefix = build_prompt_prefix(example["clause_text"])
     full_text = prefix + clause_type + tokenizer.eos_token
 
     prefix_ids = tokenizer(prefix, add_special_tokens=False)["input_ids"]
