@@ -205,16 +205,33 @@ def _compute_metrics(eval_pred) -> dict[str, float]:
     # an off-by-one-misaligned accuracy (transformers' own loss functions do
     # this shift internally, which is easy to forget when reimplementing a
     # metric outside that path).
+    # WHY iterate per-batch: our examples have wildly different token lengths
+    # (a single clause-type label vs. a full instruction+clause prompt), so
+    # each eval batch gets padded to its own max length, not a dataset-wide
+    # one. Trying to torch.cat/np.stack predictions across batches of
+    # different padded lengths raises "too many indices for array" (it
+    # silently degrades into a ragged 1-D object array) — this is exactly
+    # what build_trainer's eval_do_concat_batches=False avoids, by handing
+    # compute_metrics a list of per-batch arrays instead of one pre-stacked
+    # array. Accumulating counts batch-by-batch sidesteps needing them to
+    # share a shape at all.
     """
     import numpy as np
 
     predictions, labels = eval_pred
-    predictions = np.asarray(predictions)[:, :-1]
-    labels = np.asarray(labels)[:, 1:]
+    if not isinstance(predictions, (list, tuple)):
+        predictions, labels = [predictions], [labels]
 
-    mask = labels != -100
-    correct = (predictions == labels) & mask
-    accuracy = correct.sum() / max(mask.sum(), 1)
+    total_correct = 0
+    total_counted = 0
+    for preds_batch, labels_batch in zip(predictions, labels):
+        preds_batch = np.asarray(preds_batch)[:, :-1]
+        labels_batch = np.asarray(labels_batch)[:, 1:]
+        mask = labels_batch != -100
+        total_correct += int(((preds_batch == labels_batch) & mask).sum())
+        total_counted += int(mask.sum())
+
+    accuracy = total_correct / max(total_counted, 1)
     return {"accuracy": float(accuracy)}
 
 
@@ -248,6 +265,13 @@ def build_trainer(
 
     sft_config = SFTConfig(
         max_length=config["model"]["max_length"],
+        # WHY: eval batches have widely varying padded lengths (clause-type
+        # labels are a handful of tokens; full prompts are hundreds) — the
+        # default eval_do_concat_batches=True tries to stack all batches'
+        # predictions into one array and silently produces a ragged/1-D
+        # array instead, which _compute_metrics can't index. False keeps
+        # each batch separate; _compute_metrics accumulates per-batch counts.
+        eval_do_concat_batches=False,
         **training_cfg,
     )
 

@@ -12,7 +12,7 @@ import pytest
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer, Qwen2Config
 
-from clausewise.train import format_training_example, load_config, prepare_model_for_qlora
+from clausewise.train import _compute_metrics, format_training_example, load_config, prepare_model_for_qlora
 
 _VALID_CONFIG = {
     "model": {"name": "Qwen/Qwen2.5-0.5B-Instruct", "max_length": 512},
@@ -145,3 +145,41 @@ def test_prepare_model_for_qlora_trainable_percent_under_two_percent():
 
     assert trainable_params > 0
     assert trainable_pct < 2.0
+
+
+def test_compute_metrics_handles_variable_length_eval_batches():
+    """_compute_metrics must not crash when eval batches have different padded lengths, and must accumulate correctly across them.
+
+    Regression test: this reproduces the Kaggle T4 failure where predictions
+    from batches of different sequence lengths couldn't be stacked into one
+    array (Trainer's eval_do_concat_batches=False hands compute_metrics a
+    list of per-batch arrays instead — see build_trainer's comment).
+
+    Batch 1 (length 4): shifted pairs are (p1,l2)=(7,7) and (p2,l3)=(8,8),
+    both correct -> 2/2. Batch 2 (length 6): shifted pairs are 3 masked, then
+    (q3,m4)=(5,9) wrong and (q4,m5)=(10,10) correct -> 1/2. Combined: 3/4 = 0.75.
+    """
+    batch1_preds = [[0, 7, 8, 0]]
+    batch1_labels = [[0, -100, 7, 8]]
+    batch2_preds = [[0, 0, 0, 5, 10, 0]]
+    batch2_labels = [[0, -100, -100, -100, 9, 10]]
+
+    metrics = _compute_metrics(([batch1_preds, batch2_preds], [batch1_labels, batch2_labels]))
+
+    assert metrics["accuracy"] == pytest.approx(0.75)
+
+
+def test_compute_metrics_handles_single_pre_concatenated_batch():
+    """_compute_metrics must also work when predictions/labels are already single arrays (the non-ragged case).
+
+    predictions[:, :-1] = [0, 3, 4] must align against labels[:, 1:] = [-100, 3, 4]
+    (position 0 of that shifted pair is masked and ignored; positions 1-2 match).
+    """
+    import numpy as np
+
+    predictions = np.array([[0, 3, 4, 0]])
+    labels = np.array([[0, -100, 3, 4]])
+
+    metrics = _compute_metrics((predictions, labels))
+
+    assert metrics["accuracy"] == pytest.approx(1.0)
