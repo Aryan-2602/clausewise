@@ -1,0 +1,29 @@
+# QLoRA hyperparameters for Clausewise clause classification fine-tuning.
+# All values here are the CLAUDE.md starting-point defaults; tune based on
+# baseline/fine-tuned benchmark results in Phase 3+, not by hardcoding
+# overrides elsewhere in the codebase.
+
+lora:
+  r: 8
+  alpha: 16 # alpha = 2r is the standard starting point
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+
+training:
+  learning_rate: 2.0e-4
+  epochs: 3
+  batch_size: 4
+  gradient_accumulation_steps: 4 # effective batch size = 16
+  optimizer: paged_adamw_8bit
+
+quantization:
+  bits: 4
+  quant_type: nf4
+  double_quant: true
+
+data:
+  max_length: 512
+  dev_model: Qwen/Qwen2.5-0.5B-Instruct
+  validation_model: meta-llama/Llama-3.2-1B-Instruct
