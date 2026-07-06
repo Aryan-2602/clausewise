@@ -1,29 +1,53 @@
 # QLoRA hyperparameters for Clausewise clause classification fine-tuning.
-# All values here are the CLAUDE.md starting-point defaults; tune based on
-# baseline/fine-tuned benchmark results in Phase 3+, not by hardcoding
-# overrides elsewhere in the codebase.
+# All values are the CLAUDE.md starting-point defaults; tune based on
+# baseline/fine-tuned benchmark results, not by hardcoding overrides
+# elsewhere in the codebase.
+#
+# FINDING: learning_rate is written "2.0e-4", not "2e-4". PyYAML's float
+# regex (YAML 1.1) requires a decimal point before the exponent to parse a
+# scalar as a float — "2e-4" loads back as the *string* "2e-4", which would
+# silently break TrainingArguments (it expects a float). Same value, safe
+# representation.
 
-lora:
+model:
+  name: "Qwen/Qwen2.5-0.5B-Instruct"
+  max_length: 512
+
+qlora:
   r: 8
-  alpha: 16 # alpha = 2r is the standard starting point
-  dropout: 0.05
-  target_modules:
-    - q_proj
-    - v_proj
-
-training:
-  learning_rate: 2.0e-4
-  epochs: 3
-  batch_size: 4
-  gradient_accumulation_steps: 4 # effective batch size = 16
-  optimizer: paged_adamw_8bit
+  lora_alpha: 16 # alpha = 2r is the standard starting point
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "v_proj"]
+  bias: "none"
+  task_type: "CAUSAL_LM"
 
 quantization:
-  bits: 4
-  quant_type: nf4
-  double_quant: true
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+training:
+  output_dir: "checkpoints/"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4 # effective batch size = 16
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  fp16: false
+  bf16: true
+  logging_steps: 10
+  save_strategy: "epoch"
+  evaluation_strategy: "epoch" # WHY: kept as the CLAUDE.md-spec'd key name; train.py maps it to transformers' current "eval_strategy" field.
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  seed: 42
+  optim: "paged_adamw_8bit"
 
 data:
-  max_length: 512
-  dev_model: Qwen/Qwen2.5-0.5B-Instruct
-  validation_model: meta-llama/Llama-3.2-1B-Instruct
+  max_train_samples: null # null = use full dataset
+  max_eval_samples: null
+  use_class_weights: true
+  min_samples_per_class: 50 # oversample_minority_classes() floor; see clausewise/data.py

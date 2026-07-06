@@ -6,6 +6,8 @@
 # deterministically on CPU with no network dependency beyond that one test.
 """
 
+from collections import Counter
+
 import pytest
 from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer
@@ -16,6 +18,7 @@ from clausewise.data import (
     format_as_instruction,
     get_class_weights,
     load_cuad,
+    oversample_minority_classes,
 )
 
 _TOKENIZER_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -118,3 +121,15 @@ def test_get_class_weights_sum_approximately_num_classes():
     num_classes = len(set(dataset["train"]["clause_type"]))
     assert len(weights) == num_classes
     assert sum(weights.values()) == pytest.approx(num_classes, rel=0.5)
+
+
+def test_oversample_minority_classes_reaches_minimum_and_grows_dataset():
+    """Every class must reach min_samples_per_class, and total size must not shrink."""
+    dataset = _toy_dataset()["train"]  # 3x "Governing Law", 1x "Termination For Convenience"
+    original_size = len(dataset)
+
+    rebalanced = oversample_minority_classes(dataset, min_samples_per_class=5, seed=42)
+
+    counts = Counter(rebalanced["clause_type"])
+    assert all(count >= 5 for count in counts.values())
+    assert len(rebalanced) > original_size

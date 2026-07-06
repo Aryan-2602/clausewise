@@ -1,0 +1,15 @@
+{
+  "mode": "zero_shot",
+  "accuracy": 1.0,
+  "macro_f1": 0.4,
+  "per_class_f1": {
+    "Audit Rights": 0.0,
+    "Cap On Liability": 0.0,
+    "Governing Law": 1.0,
+    "Parties": 1.0,
+    "Termination For Convenience": 0.0
+  },
+  "unknown_rate": 0.0,
+  "n_samples": 2,
+  "duration_seconds": 5.0067901611328125e-06
+}

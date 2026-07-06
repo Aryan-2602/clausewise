@@ -9,11 +9,12 @@ where category is parsed out of the question string. See results/data_exploratio
 for the full exploration and additional FINDINGs.
 """
 
+import random
 import re
 import unicodedata
 from collections import Counter
 
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset
 
 # WHY: the canonical load_dataset("cuad") loader relies on a HF "loading script",
 # and datasets>=4.0 removed script execution support entirely. This community
@@ -182,3 +183,45 @@ def get_class_weights(dataset: DatasetDict) -> dict:
         clause_type: total / (num_classes * count)
         for clause_type, count in counts.items()
     }
+
+
+def oversample_minority_classes(
+    dataset: Dataset, min_samples_per_class: int = 50, seed: int = 42
+) -> Dataset:
+    """Duplicate examples (with replacement) so every clause_type reaches at least min_samples_per_class rows.
+
+    # WHY: oversampling the training data is cleaner than weighting the loss
+    # for causal LM fine-tuning — get_class_weights() (above) produces a
+    # per-class weight, but SFTTrainer's loss is token-level cross-entropy
+    # computed after labels are detached from which example (and thus which
+    # class) they came from, so there's no per-example hook to apply a class
+    # weight to (see clausewise/train.py's build_trainer docstring). Duplicating
+    # rare-class rows before training sidesteps that entirely: the model just
+    # sees them more often, no custom loss required.
+    # TRADEOFF: oversampling duplicates examples verbatim, so a rare class's
+    # already-small handful of distinct clauses gets repeated rather than
+    # augmented with new variation — this risks the model overfitting/
+    # memorizing those specific clauses rather than learning the class in
+    # general. We accept this because the alternative (no oversampling) means
+    # the model likely never learns rare classes at all: CUAD's ~78x imbalance
+    # (see results/data_exploration.json) means several classes have single-
+    # digit representation in a random training batch.
+    Returns the rebalanced Dataset (original rows plus oversampled extras).
+    """
+    rng = random.Random(seed)
+
+    indices_by_type: dict[str, list[int]] = {}
+    for i, clause_type in enumerate(dataset["clause_type"]):
+        indices_by_type.setdefault(clause_type, []).append(i)
+
+    extra_indices = []
+    for clause_type, indices in indices_by_type.items():
+        deficit = min_samples_per_class - len(indices)
+        if deficit > 0:
+            extra_indices.extend(rng.choices(indices, k=deficit))
+
+    if not extra_indices:
+        return dataset
+
+    oversampled_extra = dataset.select(extra_indices)
+    return concatenate_datasets([dataset, oversampled_extra])
