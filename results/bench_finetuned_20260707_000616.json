@@ -1,0 +1,83 @@
+{
+  "adapter_path": "/kaggle/working/clausewise/results/adapter",
+  "baseline_source": "/kaggle/working/clausewise/results/bench_baseline_20260706_024308.json",
+  "finetuned_evaluation": {
+    "accuracy": 0.752411575562701,
+    "macro_f1": 0.6075637078004845,
+    "per_class_f1": {
+      "Affiliate License-Licensee": 0.0,
+      "Affiliate License-Licensor": 0.0,
+      "Agreement Date": 0.7713004484304933,
+      "Anti-Assignment": 0.8513513513513513,
+      "Audit Rights": 0.9090909090909091,
+      "Cap On Liability": 0.7572815533980582,
+      "Change Of Control": 0.6538461538461539,
+      "Competitive Restriction Exception": 0.36363636363636365,
+      "Covenant Not To Sue": 0.8636363636363636,
+      "Document Name": 0.9900990099009901,
+      "Effective Date": 0.3404255319148936,
+      "Exclusivity": 0.5230769230769231,
+      "Expiration Date": 0.8354430379746836,
+      "Governing Law": 0.9878048780487805,
+      "Insurance": 0.9538461538461539,
+      "Ip Ownership Assignment": 0.6976744186046512,
+      "Irrevocable Or Perpetual License": 0.4,
+      "Joint Ip Ownership": 0.7058823529411765,
+      "License Grant": 0.49557522123893805,
+      "Liquidated Damages": 0.6,
+      "Minimum Commitment": 0.7619047619047619,
+      "Most Favored Nation": 0.4,
+      "No-Solicit Of Customers": 0.2222222222222222,
+      "No-Solicit Of Employees": 0.4,
+      "Non-Compete": 0.65625,
+      "Non-Disparagement": 0.75,
+      "Non-Transferable License": 0.3,
+      "Notice Period To Terminate Renewal": 0.48484848484848486,
+      "Parties": 0.9569377990430622,
+      "Post-Termination Services": 0.7352941176470589,
+      "Price Restrictions": 0.0,
+      "Renewal Term": 0.6530612244897959,
+      "Revenue/Profit Sharing": 0.8695652173913043,
+      "Rofr/Rofo/Rofn": 0.5454545454545454,
+      "Source Code Escrow": 1.0,
+      "Termination For Convenience": 0.782608695652174,
+      "Third Party Beneficiary": 0.6666666666666666,
+      "Uncapped Liability": 0.45454545454545453,
+      "Unlimited/All-You-Can-Eat-License": 0.2857142857142857,
+      "Volume Restriction": 0.46153846153846156,
+      "Warranty Duration": 0.8235294117647058
+    },
+    "unknown_rate": 0.0,
+    "n_samples": 1244,
+    "confusion_matrix": {
+      "Effective Date -> Agreement Date": 44,
+      "Effective Date -> Expiration Date": 9,
+      "Uncapped Liability -> Cap On Liability": 8,
+      "Non-Transferable License -> License Grant": 8,
+      "Renewal Term -> Notice Period To Terminate Renewal": 7,
+      "Affiliate License-Licensee -> License Grant": 7,
+      "Agreement Date -> Effective Date": 7,
+      "Exclusivity -> License Grant": 6,
+      "No-Solicit Of Employees -> Non-Compete": 6,
+      "Change Of Control -> Anti-Assignment": 6
+    },
+    "duration_seconds": 390.3342869281769
+  },
+  "forgetting_evaluation": {
+    "base_scores": {
+      "prime_numbers": 0,
+      "capital_of_france": 1,
+      "apple_arithmetic": 1
+    },
+    "finetuned_scores": {
+      "prime_numbers": 1,
+      "capital_of_france": 1,
+      "apple_arithmetic": 1
+    },
+    "forgetting_delta": {
+      "prime_numbers": 1,
+      "capital_of_france": 0,
+      "apple_arithmetic": 0
+    }
+  }
+}

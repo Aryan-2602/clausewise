@@ -1,0 +1,17 @@
+{
+  "base_scores": {
+    "prime_numbers": 0,
+    "capital_of_france": 1,
+    "apple_arithmetic": 1
+  },
+  "finetuned_scores": {
+    "prime_numbers": 1,
+    "capital_of_france": 1,
+    "apple_arithmetic": 1
+  },
+  "forgetting_delta": {
+    "prime_numbers": 1,
+    "capital_of_france": 0,
+    "apple_arithmetic": 0
+  }
+}
